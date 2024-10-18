@@ -1,0 +1,83 @@
+pipeline {
+    agent {
+        label "BuildServer1"
+    }
+    tools {
+        maven 'maven3.9.5'
+    }
+    stages {
+        stage('Prepare Env') {
+            steps {
+                echo "Preparing Environment"
+                git branch: 'main', url: 'https://gitlab.com/rns-app/student-app.git'
+            }
+        }
+        stage('Compiling_SrcCode') {
+            steps {
+                echo "Compiling Source Code"
+                sh 'mvn clean compile'
+            }
+            
+        }
+        stage('PreDeployment_Tests') {
+            steps {
+                echo "Pre Deployment Tests"
+                sh '''echo 2 | sudo alternatives --config java
+                java -version
+                mvn clean test
+                echo 1 | sudo alternatives --config java
+                java -version
+                '''
+            }
+            post {
+                success {
+                    junit stdioRetention: '', testResults: 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+        stage('Packaging_App') {
+            steps {
+                echo "Packaging the APP"
+                sh 'mvn clean package -DskipTests'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/*.war', followSymlinks: false
+                }
+            }
+        }
+        stage('Deploying_APP') {
+            steps {
+                echo "Deploying the APP"
+                sh '''
+                sudo setsebool -P httpd_can_network_connect 1
+                sudo mysql -uroot < ./dbscript/studentapp.sql
+                
+                # Modifying the managers context.xml file to access the managers application in tomcat
+                sudo su devops -c "cp ./tomcat/manager/context.xml /opt/appserver/webapps/manager/META-INF/"
+                
+                # Adding user to the tomcat
+                sudo su devops -c "cp ./tomcat/conf/tomcat-users.xml /opt/appserver/conf/"
+            
+                # Loading db driver to the tomcat to integrate with db
+                sudo su devops -c "cp ./tomcat/lib/mysql-connector.jar /opt/appserver/lib/"
+                
+                # Integrating tomcat with db
+                sudo su devops -c "cp ./tomcat/conf/context.xml /opt/appserver/conf/"
+                
+                # Deploying the build artifact to the tomcat webapps folder
+                sudo su devops -c "cp ./target/*.war /opt/appserver/webapps/student.war"
+                sudo systemctl restart tomcat
+                
+                # Deploying static application
+                sudo rm -rf /usr/share/nginx/html/*
+                sudo cp -R /opt/static-project/iPortfolio/* /usr/share/nginx/html/
+                
+                # Reverse proxy config
+                sudo cp ./nginx/nginx.conf /etc/nginx/
+                sudo systemctl restart nginx
+                '''
+            }
+        }
+    }
+}
