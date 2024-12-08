@@ -1,3 +1,5 @@
-StudentAPP is a user-friendly application was developed as part of my practical Jenkins project lab.
+StudentAPP is a user-friendly application developed as part of my practical Jenkins project lab.
 
-This application is deployed using Jenkins pipeline by integrating Maven and Tomcat services.
+The application is deployed using a Jenkins pipeline by integrating Maven for build automation and Apache Tomcat as the deployment server.
+
+This project demonstrates the CI/CD process through automated builds, testing, and deployment.
